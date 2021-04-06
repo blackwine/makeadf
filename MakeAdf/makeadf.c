@@ -15,10 +15,11 @@
 #include "adflib.h"
 
 typedef struct {
-	bool recursive;
 	char* label;
 	char* adfFile;
 	char* bootBlock;
+	bool bootBlockSimple;
+	bool recursive;
 } Settings;
 
 void assertMsg(int eval, char *msg, ...)
@@ -89,7 +90,8 @@ void usage()
 		"  Available options:\n"
 		"    -l [LABEL]     set volume label, default: \"empty\"\n"
 		"    -r             recursively add files\n"
-		"    -b [BOOTBLOCK] add a bootblock to the floppy from file\n"
+		"    -B             add a simple DOS bootblock to the floppy or\n"
+		"    -b [BOOTBLOCK] add a bootblock from file\n"
 		"\n"
 		"  Example:\n"
 		"    makeadf -l myfloppy myfloppy.adf file.txt\n"
@@ -168,10 +170,48 @@ void recursiveAdd(struct Volume* vol, const char* dir, const char* path, int dep
 	assertMsg(chdir(wd) >= 0, "could not change to prev dir");
 }
 
-void addBootBlock(struct Volume* vol, char* filename)
+void addBootBlock(struct Volume* vol, unsigned char* code, size_t size)
+{
+	unsigned char bootblock[1024];
+
+	size = size > 1024 ? 1024 : size;
+	memcpy(bootblock, code, size);
+	if (size < 1024)
+		memset(bootblock+size, 0, sizeof(bootblock)-size);
+	assertMsg(adfInstallBootBlock(vol, bootblock) == RC_OK, "could not install bootblock");
+}
+
+// Minimal DOS bootblock code
+//
+//  0000000c: 43fa 0018                         lea     0x26(pc),a1
+//  00000010: 4eae ffa0                         jsr     -0x60(a6)
+//  00000014: 4a80                              tst.l   d0
+//  00000016: 670a                              beq.b   0x22
+//  00000018: 2040                              movea.l d0,a0
+//  0000001a: 2068 0016                         movea.l 0x16(a0),a0
+//  0000001e: 7000                              moveq   #0,d0
+//  00000020: 4e75                              rts
+//  00000022: 70ff                              moveq   #-1,d0
+//  00000024: 4e75                              rts
+//  00000026: 64 6f 73 2e 6c 69 62 72 61 72 00  dc.b "dos.library",0
+
+void addSimpleBootBlock(struct Volume* vol)
+{
+	unsigned char bootcode[] =
+		"\0\0\0\0" "\0\0\0\0" "\0\0\0\0"
+		"\x43\xfa\x00\x18\x4e\xae\xff\xa0\x4a\x80\x67\x0a"
+		"\x20\x40\x20\x68\x00\x16\x70\x00\x4e\x75\x70\xff"
+		"\x4e\x75"
+		"dos.library\0";
+
+	addBootBlock(vol, bootcode, sizeof(bootcode));
+}
+
+void addFileBootBlock(struct Volume* vol, char* filename)
 {
 	unsigned char code[1024];
-	memset(code, 0, sizeof(code));
+	size_t boot_size;
+
 	FILE* f = fopen(filename, "r");
 
 	assertMsg(f != NULL, "could not open bootblock file: %s", filename);
@@ -184,16 +224,8 @@ void addBootBlock(struct Volume* vol, char* filename)
 		printf("warning: bootblock file is not 1024 bytes (it's %ld bytes)\n", size);
 	}
 
-	for(int i = 0; i < 1024; i++){
-		int c = fgetc(f);
-		if(c == EOF){
-			break;
-		}
-
-		code[i] = (unsigned char)c;
-	}
-
-	assertMsg(adfInstallBootBlock(vol, code) == RC_OK, "could not install bootblock");
+	boot_size = fread(code, 1, 1024, f);
+	addBootBlock(vol, code, boot_size);
 }
 
 int createFloppy(Settings* settings, char** files, int numFiles)
@@ -225,9 +257,12 @@ int createFloppy(Settings* settings, char** files, int numFiles)
 	}
 
 	// Add the bootblock
-	if(settings->bootBlock){
+	if(settings->bootBlockSimple){
+		printf("simple DOS bootblock\n");
+		addSimpleBootBlock(vol);
+	} else if(settings->bootBlock){
 		printf("bootblock: %s\n", settings->bootBlock);
-		addBootBlock(vol, settings->bootBlock);
+		addFileBootBlock(vol, settings->bootBlock);
 	}
 
 	for (int i = 0; i < numFiles; i++){
@@ -257,15 +292,18 @@ int createFloppy(Settings* settings, char** files, int numFiles)
 int main(int argc, char** argv)
 {
 	char defaultLabel[] = "empty";
-	Settings settings = {false, defaultLabel, NULL, NULL};
+	Settings settings = {defaultLabel, NULL, NULL, false, false};
 
 	int c;
 
-	while ((c = getopt (argc, argv, "rl:b:")) != -1){
+	while ((c = getopt (argc, argv, "rl:b:B")) != -1){
 		switch (c)
 		{
 			case 'b':
 				settings.bootBlock = optarg;
+				break;
+			case 'B':
+				settings.bootBlockSimple = true;
 				break;
 			case 'r':
 				settings.recursive = true;
