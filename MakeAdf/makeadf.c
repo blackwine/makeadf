@@ -1,4 +1,4 @@
-#define MAKEADF_VERSION "0.1"
+#define MAKEADF_VERSION "0.2"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -50,11 +50,11 @@ void adfChdir(struct Volume* vol, const char* dir)
 	while(list){
 		struct Entry* entry = (struct Entry*)list->content;
 		if(entry->type == ST_DIR && !strcmp(entry->name, dir)){
-			adfChangeDir(vol, dir);	
+			adfChangeDir(vol, dir);
 		}
 		list = list->next;
 	}
-	
+
 	fprintf(stderr, "could not cd into adf dir: %s\n", dir);
 	exit(1);
 }
@@ -126,11 +126,11 @@ void recursiveAdd(struct Volume* vol, const char* dir, const char* path, int dep
 	}else{
 		snprintf(myPath, PATH_MAX, "%s", adfDir);
 	}
-	
+
 	printf(" [d] %s\n", myPath);
 
 	assertMsg(d != NULL, "could not open directory");
-	
+
 	// Save local directory path
 	char wd[PATH_MAX];
 	assertMsg(getcwd(wd, PATH_MAX - 1) != NULL, "could not get working directory");
@@ -151,7 +151,7 @@ void recursiveAdd(struct Volume* vol, const char* dir, const char* path, int dep
 		}
 
 		assertMsg(stat(entry->d_name, &fs) >= 0, "could not stat: %s", entry->d_name);
-		
+
 		if ( S_ISDIR(fs.st_mode) ) {
 			recursiveAdd(vol, entry->d_name, myPath, depth + 1);
 		} else {
@@ -160,7 +160,7 @@ void recursiveAdd(struct Volume* vol, const char* dir, const char* path, int dep
 		}
 	}
 	closedir(d);
-	
+
 	// Change up one dir in adf
 	adfParentDir(vol);
 
@@ -223,13 +223,13 @@ int createFloppy(Settings* settings, char** files, int numFiles)
 		fprintf (stderr, "could not mount volume in: %s\n", settings->adfFile);
 		return 1;
 	}
-	
+
 	// Add the bootblock
 	if(settings->bootBlock){
 		printf("bootblock: %s\n", settings->bootBlock);
 		addBootBlock(vol, settings->bootBlock);
 	}
-	
+
 	for (int i = 0; i < numFiles; i++){
 		if(isDirectory(files[i])){
 			if(settings->recursive){
@@ -244,7 +244,7 @@ int createFloppy(Settings* settings, char** files, int numFiles)
 		printf(" [f] %s\n", base);
 		adfCopy(vol, files[i], base);
 	}
-	
+
 	adfUnMount(vol);
 	adfUnMountDev(floppy);
 	adfEnvCleanUp();
