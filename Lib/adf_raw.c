@@ -186,7 +186,7 @@ RETCODE
 adfReadBootBlock(struct Volume* vol, struct bBootBlock* boot)
 {
 	unsigned char buf[1024];
-	
+
 /*puts("22");*/
 	if (adfReadBlock(vol, 0, buf)!=RC_OK)
 		return RC_ERROR;
@@ -226,7 +226,7 @@ adfWriteBootBlock(struct Volume* vol, struct bBootBlock* boot)
     boot->dosType[0] = 'D';
     boot->dosType[1] = 'O';
     boot->dosType[2] = 'S';
-	memcpy(buf, boot, LOGICAL_BLOCK_SIZE*2);
+    memcpy(buf, boot, LOGICAL_BLOCK_SIZE*2);
 #ifdef LITT_ENDIAN
     swapEndian(buf, SWBL_BOOT);
 #endif
@@ -234,7 +234,7 @@ adfWriteBootBlock(struct Volume* vol, struct bBootBlock* boot)
     if (boot->rootBlock==880 || boot->data[0]!=0) {
         newSum = adfBootSum(buf);
 /*fprintf(stderr,"sum %x %x\n",newSum,adfBootSum2(buf));*/
-        swLong(buf+4,newSum);
+        swLong(buf+4, newSum);
 /*        *(uint32_t*)(buf+4) = swapLong((unsigned char*)&newSum);*/
     }
 
@@ -290,48 +290,28 @@ adfBitmapSum(unsigned char *buf)
 
 
 /*
- * adfBootSum
- *
+ * adfBootSum - calculate bootblock checksum
  */
-    uint32_t 
-adfBootSum(unsigned char *buf)
-{
-    uint32_t d, newSum;
-    int i;
-	
-    newSum=0L;
-    for(i=0; i<256; i++) {
-        if (i!=1) {
-            d = Long(buf+i*4);
-            if ( (ULONG_MAX-newSum)<d )
-                newSum++;
-            newSum+=d;
-        }
-    }
-    newSum = ~newSum;	/* not */
 
-    return(newSum);
-}
-
-    uint32_t 
-adfBootSum2(unsigned char *buf)
+uint32_t
+adfBootSum(unsigned char* buf)
 {
-    uint32_t prevsum, newSum;
+    uint32_t d, sum = 0;
     int i;
 
-    prevsum = newSum=0L;
-    for(i=0; i<1024/sizeof(uint32_t); i++) {
-        if (i!=1) {
-            prevsum = newSum;
-            newSum += Long(buf+i*4);
-            if (newSum < prevsum)
-                newSum++;
-        }
+    // clear checksum as it doesn't take part in calculations
+    uint32_t* buf_32bit = (uint32_t*) buf;
+    buf_32bit[1] = 0;
+
+    for(i=0; i<1024; i+=4) {
+        d = Long(buf+i);
+        // sum with carry bit
+        if (sum + d < sum)
+            sum++;
+        sum += d;
     }
-    newSum = ~newSum;	/* not */
 
-    return(newSum);
+    return ~sum;
 }
-
 
 /*#######################################################################################*/
